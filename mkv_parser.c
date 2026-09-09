@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <emscripten.h>
+#include "mkv_parser.h"
 
 // ----- EBML helpers -----
 static uint64_t read_vint(const uint8_t *data, int *bytes) {
