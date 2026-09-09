@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <emscripten.h>
-#include "mkv_parser.h"
 
 // ----- EBML helpers -----
 static uint64_t read_vint(const uint8_t *data, int *bytes) {
@@ -50,8 +49,6 @@ static int parse_elem(const uint8_t *buf, size_t max, ebml_elem *out) {
 
 // ----- Storage -----
 #define MAX_FRAMES 10000
-#define MAX_FRAME_SIZE 1024 * 1024 * 10
-
 static const uint8_t *video_frames[MAX_FRAMES];
 static size_t video_frame_len[MAX_FRAMES];
 static int video_count = 0;
@@ -63,13 +60,11 @@ static int audio_count = 0;
 static char video_codec[64] = "Unknown";
 static char audio_codec[64] = "Unknown";
 static int width = 0, height = 0;
-static int sample_rate = 0;
-static int channels = 0;
+static int sample_rate = 0, channels = 0;
 static uint64_t audio_track_number = 0;
 
 // ----- Parse internals -----
 static void parse_mkv_internal(const uint8_t *buf, size_t len);
-
 static void parse_children(const uint8_t *buf, size_t len) {
     size_t pos = 0;
     while (pos < len) {
@@ -113,40 +108,20 @@ static void parse_mkv_internal(const uint8_t *buf, size_t len) {
                             if (!u2) break;
                             q += u2;
 
-                            if (f.id == 0xD7 && f.size > 0) {
-                                track_num = f.data[0];
-                            }
-                            if (f.id == ID_TRACKTYPE && f.size > 0) {
-                                track_type = f.data[0];
-                            }
+                            if (f.id == 0xD7 && f.size > 0) track_num = f.data[0];
+                            if (f.id == ID_TRACKTYPE && f.size > 0) track_type = f.data[0];
                             if (f.id == ID_CODEC && f.size < sizeof(codec_id)) {
                                 memcpy(codec_id, f.data, f.size);
                                 codec_id[f.size] = 0;
                             }
-                            if (f.id == ID_WIDTH && f.size >= 2) {
-                                w = (f.data[0] << 8) | f.data[1];
-                            }
-                            if (f.id == ID_HEIGHT && f.size >= 2) {
-                                h = (f.data[0] << 8) | f.data[1];
-                            }
-                            if (f.id == ID_SAMPLERATE && f.size >= 4) {
-                                // Float32
-                                sr = *(float*)(f.data);
-                            }
-                            if (f.id == ID_CHANNELS && f.size > 0) {
-                                ch = f.data[0];
-                            }
+                            if (f.id == ID_WIDTH && f.size >= 2) w = (f.data[0] << 8) | f.data[1];
+                            if (f.id == ID_HEIGHT && f.size >= 2) h = (f.data[0] << 8) | f.data[1];
+                            if (f.id == ID_SAMPLERATE && f.size >= 4) sr = *(float*)(f.data);
+                            if (f.id == ID_CHANNELS && f.size > 0) ch = f.data[0];
                         }
 
-                        if (track_type == 1) { // video
-                            width = w; height = h;
-                            strcpy(video_codec, codec_id);
-                        }
-                        if (track_type == 2) { // audio
-                            audio_track_number = track_num;
-                            sample_rate = sr; channels = ch;
-                            strcpy(audio_codec, codec_id);
-                        }
+                        if (track_type == 1) { width = w; height = h; strcpy(video_codec, codec_id); }
+                        if (track_type == 2) { audio_track_number = track_num; sample_rate = sr; channels = ch; strcpy(audio_codec, codec_id); }
                     }
                 }
                 break;
@@ -162,18 +137,12 @@ static void parse_mkv_internal(const uint8_t *buf, size_t len) {
 
                     if (b.id == ID_SIMPLEBLOCK || b.id == ID_BLOCK) {
                         if (b.size < 4) continue;
-
-                        // Track number (first byte)
                         uint64_t track_num = b.data[0];
-
-                        // Video frame
                         if (video_count < MAX_FRAMES) {
                             video_frames[video_count] = b.data + 4;
                             video_frame_len[video_count] = b.size - 4;
                             video_count++;
                         }
-
-                        // Audio frame (if track matches)
                         if (track_num == audio_track_number && audio_count < MAX_FRAMES) {
                             audio_frames[audio_count] = b.data + 4;
                             audio_frame_len[audio_count] = b.size - 4;
@@ -185,24 +154,22 @@ static void parse_mkv_internal(const uint8_t *buf, size_t len) {
             }
 
             default:
-                if (e.size > 0) {
-                    parse_mkv_internal(e.data, e.size);
-                }
+                if (e.size > 0) parse_mkv_internal(e.data, e.size);
                 break;
         }
     }
 }
 
-// ----- Exported WASM functions -----
+// ============================================================
+//  EXPORTED FUNCTIONS (EMSCRIPTEN_KEEPALIVE)
+// ============================================================
+
 EMSCRIPTEN_KEEPALIVE
 void parse_mkv(const uint8_t *data, size_t length) {
-    video_count = 0;
-    audio_count = 0;
-    width = height = 0;
-    sample_rate = channels = 0;
+    video_count = 0; audio_count = 0;
+    width = height = 0; sample_rate = channels = 0;
     audio_track_number = 0;
-    video_codec[0] = 0;
-    audio_codec[0] = 0;
+    video_codec[0] = 0; audio_codec[0] = 0;
     parse_mkv_internal(data, length);
 }
 
