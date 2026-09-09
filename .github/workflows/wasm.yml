@@ -25,7 +25,7 @@ jobs:
 
       - name: Compile MKV Parser to WASM
         run: |
-          emcc src/mkv_parser.c \
+          emcc mkv_parser.c \
             -o dist/mkv_parser.js \
             -s WASM=1 \
             -s EXPORTED_FUNCTIONS='["_parse_mkv","_get_video_frame_count","_get_video_frame","_get_video_frame_size","_get_audio_frame_count","_get_audio_frame","_get_audio_frame_size","_get_video_codec","_get_audio_codec","_get_width","_get_height","_get_sample_rate","_get_channels"]' \
