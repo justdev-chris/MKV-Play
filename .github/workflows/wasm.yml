@@ -1,0 +1,41 @@
+name: Build WASM
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+
+      - name: Verify Emscripten
+        run: emcc --version
+
+      - name: Compile MKV Parser to WASM
+        run: |
+          emcc src/mkv_parser.c \
+            -o dist/mkv_parser.js \
+            -s WASM=1 \
+            -s EXPORTED_FUNCTIONS='["_parse_mkv","_get_video_frame_count","_get_video_frame","_get_video_frame_size","_get_audio_frame_count","_get_audio_frame","_get_audio_frame_size","_get_video_codec","_get_audio_codec","_get_width","_get_height","_get_sample_rate","_get_channels"]' \
+            -s ALLOW_MEMORY_GROWTH=1 \
+            -s MODULARIZE=1 \
+            -s EXPORT_NAME='MKVModule' \
+            -O3
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-build
+          path: dist/
